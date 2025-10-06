@@ -1,5 +1,5 @@
 // src/sol_icp_poc_frontend/assets/sol_icp_poc_backend.idl.js
-import { IDL } from "@dfinity/candid";
+import { IDL } from "https://cdn.jsdelivr.net/npm/@dfinity/candid@3.1.0/+esm";
 
 export const idlFactory = ({ IDL }) => {
   const Result = IDL.Variant({ 'Ok' : IDL.Nat64, 'Err' : IDL.Text });

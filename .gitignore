@@ -9,6 +9,7 @@
 
 # dfx temporary files
 .dfx/
+/.dfx
 
 # generated files
 **/declarations/
@@ -18,6 +19,8 @@ target/
 
 # frontend code
 node_modules/
+**/node_modules
+/node_modules
 dist/
 .svelte-kit/
 

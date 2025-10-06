@@ -1,10 +1,48 @@
 // src/sol_icp_poc_frontend/assets/main.js
-import { Actor, HttpAgent } from "@dfinity/agent";
-import { AuthClient } from "@dfinity/auth-client";
+import { Actor, HttpAgent } from "https://cdn.jsdelivr.net/npm/@dfinity/agent@3.1.0/+esm";
+import { AuthClient } from "https://cdn.jsdelivr.net/npm/@dfinity/auth-client@3.1.0/+esm";
 import idlFactory from "./sol_icp_poc_backend.idl.js";
 
-const host = process.env.DFX_NETWORK === "ic" ? "https://ic0.app" : "http://localhost:4943";
-const canisterId = process.env.CANISTER_ID_SOL_ICP_POC_BACKEND;
+async function loadCanisterConfig() {
+  const search = new URLSearchParams(window.location.search);
+  const hostname = window.location.hostname;
+  const inferredNetwork =
+    hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".localhost")
+      ? "local"
+      : "ic";
+
+  const network =
+    (globalThis.dfxNetwork ?? globalThis.DFX_NETWORK ?? search.get("network") ?? inferredNetwork) ||
+    "ic";
+
+  let canisterId =
+    globalThis.CANISTER_ID_SOL_ICP_POC_BACKEND ??
+    search.get("canisterId") ??
+    null;
+
+  if (!canisterId) {
+    try {
+      const response = await fetch("./canister_ids.json", { cache: "no-cache" });
+      if (response.ok) {
+        const data = await response.json();
+        const entry = data?.sol_icp_poc_backend ?? {};
+        canisterId = entry[network] ?? entry.ic ?? Object.values(entry)[0] ?? null;
+      }
+    } catch (err) {
+      console.warn("Unable to load canister_ids.json; falling back to embedded canister ID.", err);
+    }
+  }
+
+  if (!canisterId) {
+    console.warn("No canister ID resolved dynamically; using mainnet fallback.");
+    canisterId = "f4kcz-fqaaa-aaaap-an3hq-cai";
+  }
+
+  const host = network === "ic" ? "https://ic0.app" : "http://localhost:4943";
+  return { host, canisterId, network };
+}
+
+const { host, canisterId, network } = await loadCanisterConfig();
 
 let authClient = null;
 let identity = null;
@@ -69,7 +107,7 @@ async function withTimeout(promise, ms = 300000) {  // Increased to 5min to hand
 
 async function makeAgentAndActor() {
   agent = new HttpAgent({ host, identity: identity ?? undefined });
-  if (process.env.DFX_NETWORK !== "ic") {
+  if (network !== "ic") {
     await agent.fetchRootKey();
   }
   actor = Actor.createActor(idlFactory, { agent, canisterId });
@@ -475,14 +513,6 @@ document.getElementById("send").onclick = async () => {
 };
 
 // ---- SOL read/send ----
-document.getElementById("get_sol").onclick = async () => {
-  await refreshSolBalance(false);
-};
-
-document.getElementById("refresh_icp").onclick = async () => {
-  await refreshIcpBalance(false);
-};
-
 let sendingSol = false;
 document.getElementById("send_sol").onclick = async () => {
   showMuted("Processing SOL transfer... this may take up to 2 minutes due to network consensus.");
@@ -524,7 +554,6 @@ document.getElementById("send_sol").onclick = async () => {
     }
 
     if (authMode === "phantom") {
-      if (!solPubkey) throw new Error("Connect first");
       if (!solPubkey) throw new Error("Connect first");
       const nonceRes = await actor.get_nonce(solPubkey);
       if ('Err' in nonceRes) throw new Error(nonceRes.Err);
@@ -684,3 +713,4 @@ document.getElementById("copy_sol").onclick = async () => {
     showErr(`Failed to copy SOL address: ${normalizeAgentError(err)}`);
   }
 };
+
