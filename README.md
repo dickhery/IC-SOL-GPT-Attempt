@@ -1,10 +1,10 @@
-# sol_icp_poc: Seamless ICP-Solana Bridge on the Internet Computer
+# IC-SOL Wallet: Seamless ICP-Solana Bridge on the Internet Computer
 
-Welcome to **sol_icp_poc**, a groundbreaking proof-of-concept project that showcases the power of the Internet Computer (ICP) in bridging two major blockchain ecosystems: ICP and Solana. This innovative application allows users to securely hold, manage, and transfer both ICP tokens and SOL (Solana's native cryptocurrency) from a single, unified wallet interface—all powered by a Rust-based backend canister on ICP. By leveraging ICP's unique capabilities like threshold Schnorr signatures, HTTPS outcalls, and seamless integration with external wallets, this project demonstrates how ICP can act as a trustless intermediary for cross-chain operations, enabling unprecedented interoperability between ICP's scalable, low-cost smart contracts and Solana's high-speed blockchain.
+Welcome to **IC-SOL Wallet**, a groundbreaking proof-of-concept project that showcases the power of the Internet Computer (ICP) in bridging two major blockchain ecosystems: ICP and Solana. This innovative application allows users to securely hold, manage, and transfer both ICP tokens and SOL (Solana's native cryptocurrency) from a single, unified wallet interface—all powered by a Rust-based backend canister on ICP. By leveraging ICP's unique capabilities like threshold Schnorr signatures, HTTPS outcalls, and seamless integration with external wallets, this project demonstrates how ICP can act as a trustless intermediary for cross-chain operations, enabling unprecedented interoperability between ICP's scalable, low-cost smart contracts and Solana's high-speed blockchain.
 
 What makes this app truly impressive? It empowers users to authenticate via either **Internet Identity** (ICP's native, privacy-focused authentication system) or **Phantom Wallet** (Solana's popular browser extension wallet), and then effortlessly interact with **both** ICP and SOL assets using the chosen method. No need for multiple wallets or complex bridging protocols—everything happens within a simple, static web interface that runs directly in your browser, even in environments like ICP Ninja. This not only simplifies user experience but also highlights ICP's role as a "world computer" capable of securely interfacing with external blockchains like Solana through consensus-driven HTTPS outcalls, ensuring deterministic and tamper-proof results across replicas.
 
-Whether you're a developer exploring cross-chain dApps or a user looking for a hassle-free way to manage multi-chain assets, sol_icp_poc pushes the boundaries of what's possible in decentralized finance and blockchain interoperability.
+Whether you're a developer exploring cross-chain dApps or a user looking for a hassle-free way to manage multi-chain assets, IC-SOL Wallet pushes the boundaries of what's possible in decentralized finance and blockchain interoperability.
 
 ## Features
 
@@ -12,13 +12,13 @@ Whether you're a developer exploring cross-chain dApps or a user looking for a h
 - **Cross-Chain Asset Management**: Deposit, view balances, and transfer ICP and SOL seamlessly. Transfers are secured via ICP's threshold signatures for Solana operations.
 - **Service Fee Mechanism**: A minimal ICP-based service fee (currently 0.0003 ICP) covers cross-chain operations like SOL transfers, deducted transparently from your ICP balance.
 - **Latency-Aware Design**: Built with ICP's HTTPS outcalls for querying Solana RPC endpoints, ensuring consensus across replicas—though this introduces some natural latency (typically 10-60 seconds for refreshes and transfers due to multi-replica consensus and network calls).
-- **Static Frontend**: No build tools required; the UI loads as ES modules from a CDN, making it editable and runnable in browser-based IDEs like ICP Ninja.
+- **Static Frontend**: No build tools required; the UI loads as ES modules from a CDN, no bundler needed.
 - **Error Resilience**: Most issues (e.g., balance refresh errors) resolve with a simple page refresh and re-login, thanks to the stateless nature of the frontend.
 - **Secure and Transparent**: All operations are handled by an ICP canister using stable memory for user data, with nonce-based replay protection and signature verification.
 
 ## Technical Overview
 
-At its core, sol_icp_poc is an ICP canister written in Rust that acts as a bridge between ICP's ledger and Solana's blockchain. Here's how it works under the hood:
+At its core, IC-SOL Wallet is an ICP canister written in Rust that acts as a bridge between ICP's ledger and Solana's blockchain. Here's how it works under the hood:
 
 ### Backend (Rust Canister)
 - **Authentication**:
@@ -85,9 +85,9 @@ This app's ability to unify ICP and Solana under one roof, with secure cross-cha
 
 1. Upload the repository to ICP Ninja.
 2. Ensure the backend canister ID is available:
-   - If you have already deployed the backend to mainnet, update `src/sol_icp_poc_frontend/assets/canister_ids.json` to include the `ic` canister ID.
+   - If you have already deployed the backend to mainnet, update `src/ic_sol_wallet_frontend/assets/canister_ids.json` to include the `ic` canister ID.
    - To point at a locally deployed backend, add a `local` entry with the replica canister ID and start the replica before opening the editor.
-3. Open `src/sol_icp_poc_frontend/assets/index.html` in the in-browser preview. The module loader will fetch DFINITY libraries from `cdn.jsdelivr.net` automatically.
+3. Open `src/ic_sol_wallet_frontend/assets/index.html` in the in-browser preview. The module loader will fetch DFINITY libraries from `cdn.jsdelivr.net` automatically.
 
 ## Local Development Workflow
 
@@ -99,7 +99,7 @@ dfx start --background
 dfx deploy
 ```
 
-After deployment the asset canister URL (shown in the deploy output) will serve `index.html`. Append `?canisterId=<asset_canister_id>` when opening it locally. Update `src/sol_icp_poc_frontend/assets/canister_ids.json` with the generated backend ID so the frontend can discover the right canister.
+After deployment the asset canister URL (shown in the deploy output) will serve `index.html`. Append `?canisterId=<asset_canister_id>` when opening it locally. Append `?canisterId=<asset_canister_id>` when opening it locally. Update `src/ic_sol_wallet_frontend/assets/canister_ids.json` with the generated backend ID so the frontend can discover the right canister.
 
 To stop the local replica run `dfx stop`.
 
