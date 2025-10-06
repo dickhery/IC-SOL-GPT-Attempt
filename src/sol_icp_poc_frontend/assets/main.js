@@ -51,6 +51,7 @@ let actor = null;
 
 let authMode = null; // "ii" | "phantom"
 let solPubkey = null;
+let lastKnownSolBalance = { lamports: null, fetchedAt: 0 };
 
 // ---- UI helpers ----
 function setVisible(id, visible) {
@@ -68,6 +69,32 @@ const showOk = (m) => alertSet("ok", m);
 const showWarn = (m) => alertSet("warn", m);
 const showErr = (m) => alertSet("err", m);
 const showMuted = (m) => alertSet("muted", m);
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const formatSolAmount = (lamports) => `${(Number(lamports) / 1e9).toFixed(9)}`;
+
+const RETRIABLE_SOL_PATTERNS = [
+  /timed out/i,
+  /processing/i,
+  /consensus/i,
+  /inconsistent/i,
+  /temporar/i,
+  /retry/i,
+  /429/, // rate limits
+  /limit/i,
+  /network/i,
+  /rpc/i,
+  /getbalance/i,
+  /blockhash/i,
+];
+
+function shouldRetrySol(msg, err) {
+  const haystacks = [msg, err?.message, err ? String(err) : ""].filter(Boolean);
+  return haystacks.some((text) =>
+    RETRIABLE_SOL_PATTERNS.some((pattern) => pattern.test(String(text)))
+  );
+}
 
 function normalizeAgentError(e) {
   const s = (e?.message || String(e || "")).trim();
@@ -145,8 +172,6 @@ const COOLDOWN_MS = 10_000;
 
 // Shared refresh that respects auth mode + cooldowns
 async function refreshSolBalance(force = false) {
-  showMuted("Fetching SOL balance... this may take up to 1 minute due to network consensus.");
-  uiSet("sol_balance", "SOL Balance: Loading...");
   const now = Date.now();
   if (!force && (now - lastSolRefreshMs) < COOLDOWN_MS) {
     const wait = Math.ceil((COOLDOWN_MS - (now - lastSolRefreshMs)) / 1000);
@@ -157,55 +182,86 @@ async function refreshSolBalance(force = false) {
     showMuted("Refreshing SOL…");
     return;
   }
+  if (!authMode) {
+    showWarn("Pick an auth mode to refresh SOL.");
+    return;
+  }
+  if (authMode === "phantom" && !solPubkey) {
+    showWarn("Connect Phantom first");
+    return;
+  }
+
+  showMuted("Fetching SOL balance... this may take up to 1 minute due to network consensus.");
+  uiSet("sol_balance", "SOL Balance: Loading...");
+
   solRefreshInFlight = true;
   const button = document.getElementById("get_sol");
   if (button) { button.disabled = true; }
 
-  let lam = 0n;  // Use BigInt for nat64
-  let hadError = false;
-  let attempts = 0;
-  const maxRetries = 3;
-  const retryInterval = 10000;  // 10s between retries
+  let lamports = null;
+  let lastError = "";
+  const maxRetries = 5;
+  const retryIntervalMs = 5000;
 
-  while (attempts < maxRetries) {
-    attempts++;
-    try {
-      let res;
-      if (authMode === "ii") {
-        res = await withTimeout(friendlyTry(() => actor.get_sol_balance_ii(), (m) => showWarn(m)));
-      } else if (authMode === "phantom") {
-        if (!solPubkey) return showWarn("Connect Phantom first");
-        res = await withTimeout(friendlyTry(() => actor.get_sol_balance(solPubkey), (m) => showWarn(m)));
-      } else {
-        showWarn("Pick an auth mode to refresh SOL.");
-        return;
-      }
-      if ('Err' in res) {
-        throw new Error(res.Err);
-      }
-      lam = res.Ok;
-      showMuted("SOL balance updated.");
-      lastSolRefreshMs = Date.now();
-      break;  // Success, exit loop
-    } catch (e) {
-      hadError = true;
-      console.error('Refresh SOL error:', e, e.stack);
-      const msg = normalizeAgentError(e);
-      if (msg.includes("Timed out") && attempts < maxRetries) {
-        showWarn(`SOL refresh timed out (attempt ${attempts}/${maxRetries}). Retrying in 10s...`);
-        await new Promise(resolve => setTimeout(resolve, retryInterval));
-        continue;  // Retry
-      } else {
-        showErr(msg);
+  try {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        let res;
+        if (authMode === "ii") {
+          res = await withTimeout(actor.get_sol_balance_ii());
+        } else {
+          res = await withTimeout(actor.get_sol_balance(solPubkey));
+        }
+        if ('Err' in res) {
+          throw new Error(res.Err);
+        }
+        lamports = res.Ok;
+        lastSolRefreshMs = Date.now();
+        showMuted("SOL balance updated.");
+        break;
+      } catch (err) {
+        console.error('Refresh SOL error:', err, err.stack);
+        const friendly = normalizeAgentError(err);
+        lastError = friendly;
+        const attemptsLeft = maxRetries - attempt;
+        if (attemptsLeft > 0 && shouldRetrySol(friendly, err)) {
+          const waitMs = retryIntervalMs * attempt;
+          showWarn(`SOL refresh issue (${attempt}/${maxRetries}): ${friendly}. Retrying in ${(waitMs/1000).toFixed(0)}s...`);
+          await sleep(waitMs);
+          continue;
+        }
+        showErr(friendly);
         break;
       }
     }
+  } finally {
+    solRefreshInFlight = false;
+    if (button) { button.disabled = false; }
   }
-  solRefreshInFlight = false;
-  if (button) { button.disabled = false; }
-  let balanceText = `SOL Balance: ${(Number(lam)/1e9).toFixed(9)} SOL`;
-  if (hadError) balanceText += " (fetch failed after retries)";
-  uiSet("sol_balance", balanceText);
+
+  const currentTime = Date.now();
+  if (lamports !== null && lamports !== undefined) {
+    lastKnownSolBalance = { lamports, fetchedAt: currentTime };
+    uiSet("sol_balance", `SOL Balance: ${formatSolAmount(lamports)} SOL`);
+    return;
+  }
+
+  if (lastKnownSolBalance.lamports !== null) {
+    const ageSeconds = Math.max(0, Math.round((currentTime - lastKnownSolBalance.fetchedAt) / 1000));
+    const staleInfo = ageSeconds > 0 ? ` (stale; last updated ${ageSeconds}s ago)` : " (stale)";
+    uiSet("sol_balance", `SOL Balance: ${formatSolAmount(lastKnownSolBalance.lamports)} SOL${staleInfo}`);
+    if (lastError) {
+      showWarn(`${lastError} — showing last known SOL balance.`);
+    }
+    return;
+  }
+
+  uiSet("sol_balance", "SOL Balance: unavailable");
+  if (lastError) {
+    showErr(lastError);
+  } else {
+    showErr("Unable to fetch SOL balance.");
+  }
 }
 
 async function refreshIcpBalance(force = false) {
@@ -287,6 +343,7 @@ function clearAllExceptTx() {
   uiSet("sol_deposit", "SOL Deposit Address: Not loaded (connect/login first)");
   uiSet("sol_balance", "SOL Balance: Not loaded (connect/login first)");
   ["to", "amount", "to_sol", "amount_sol"].forEach(id => document.getElementById(id).value = "");
+  lastKnownSolBalance = { lamports: null, fetchedAt: 0 };
 }
 
 // ---- refresh buttons ----
