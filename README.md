@@ -1,61 +1,49 @@
-# `sol_icp_poc`
+# sol_icp_poc
 
-Welcome to your new `sol_icp_poc` project and to the Internet Computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+This project demonstrates an Internet Computer canister that bridges ICP and Solana flows. The backend canister is written in Rust and the frontend ships as static ES modules so it can run inside environments without a bundler—such as the [ICP Ninja](https://ninja.icp) editor.
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+## Frontend structure
 
-To learn more before you start working with `sol_icp_poc`, see the following documentation available online:
+- `src/sol_icp_poc_frontend/assets/index.html` bootstraps the UI and loads `main.js` as a module.
+- `src/sol_icp_poc_frontend/assets/main.js` talks directly to the backend canister using DFINITY libraries served from a CDN.
+- `src/sol_icp_poc_frontend/assets/sol_icp_poc_backend.idl.js` exports the Candid interface that `main.js` consumes.
+- `src/sol_icp_poc_frontend/assets/canister_ids.json` provides network-specific canister IDs for local testing.
 
-- [Quick Start](https://internetcomputer.org/docs/current/developer-docs/setup/deploy-locally)
-- [SDK Developer Tools](https://internetcomputer.org/docs/current/developer-docs/setup/install)
-- [Rust Canister Development Guide](https://internetcomputer.org/docs/current/developer-docs/backend/rust/)
-- [ic-cdk](https://docs.rs/ic-cdk)
-- [ic-cdk-macros](https://docs.rs/ic-cdk-macros)
-- [Candid Introduction](https://internetcomputer.org/docs/current/developer-docs/backend/candid/)
+Because every dependency is loaded from a CDN, the frontend no longer needs `npm install`, Webpack, or Vite. Editing the assets in ICP Ninja works out of the box.
 
-If you want to start working on your project right away, you might want to try the following commands:
+## Running inside ICP Ninja
 
-```bash
-cd sol_icp_poc/
-dfx help
-dfx canister --help
-```
+1. Upload the repository to ICP Ninja.
+2. Ensure the backend canister ID is available:
+   - If you have already deployed the backend to mainnet, update `src/sol_icp_poc_frontend/assets/canister_ids.json` to include the `ic` canister ID.
+   - To point at a locally deployed backend, add a `local` entry with the replica canister ID and start the replica before opening the editor.
+3. Open `src/sol_icp_poc_frontend/assets/index.html` in the in-browser preview. The module loader will fetch DFINITY libraries from `cdn.jsdelivr.net` automatically.
 
-## Running the project locally
-
-If you want to test your project locally, you can use the following commands:
+## Local development workflow
 
 ```bash
-# Starts the replica, running in the background
+# Start a local replica
 dfx start --background
 
-# Deploys your canisters to the replica and generates your candid interface
+# Deploy backend and asset canisters, regenerating the candid bindings
 dfx deploy
 ```
 
-Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.
+After deployment the asset canister URL (shown in the deploy output) will serve `index.html`. Append `?canisterId=<asset_canister_id>` when opening it locally. Update `src/sol_icp_poc_frontend/assets/canister_ids.json` with the generated backend ID so the frontend can discover the right canister.
 
-If you have made changes to your backend canister, you can generate a new candid interface with
+To stop the local replica run `dfx stop`.
+
+## Configuration files
+
+- `canister_ids.json` (project root) mirrors the format that `dfx deploy --network ic` produces. Keep it in sync with any live deployments so the CDN-loaded frontend knows which backend to talk to.
+- `dfx.json` declares the backend Rust canister and the static asset canister.
+
+## Testing
+
+The backend canister uses Rust. Build it with:
 
 ```bash
-npm run generate
+cargo check
 ```
 
-at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
-
-If you are making frontend changes, you can start a development server with
-
-```bash
-npm start
-```
-
-Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
-
-### Note on frontend environment variables
-
-If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
-
-- set`DFX_NETWORK` to `ic` if you are using Webpack
-- use your own preferred method to replace `process.env.DFX_NETWORK` in the autogenerated declarations
-  - Setting `canisters -> {asset_canister_id} -> declarations -> env_override to a string` in `dfx.json` will replace `process.env.DFX_NETWORK` with the string in the autogenerated declarations
-- Write your own `createActor` constructor
+Additional project-specific tests can be added under the `tests/` directory.
